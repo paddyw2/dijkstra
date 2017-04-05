@@ -34,8 +34,9 @@ public class Router {
     private int[] distancevector;
     private int routerid;
     private int noNeighbours;
-    ArrayList<int[]> nodeData;
-    LinkedList<Integer> neighbourPorts;
+    private ArrayList<int[]> nodeData;
+    private LinkedList<Integer> neighbourPorts;
+    private ArrayList<Integer> neighbourIds;
 
 	public Router(String peerip, int routerid, int port, String configfile, int neighborupdate, int routeupdate) {
         // save data
@@ -58,15 +59,17 @@ public class Router {
             System.out.println(e.getMessage());
         }
 
-        // create node distance vector
-        initializeVector(configfile);
 
         // create data structure, updated
         // when neighbour broadcast is
         // received
         nodeData = new ArrayList<int[]>();
+        neighbourIds = new ArrayList<Integer>();
         neighbourPorts = new LinkedList<Integer>();
         timer = new Timer();
+
+        // create node distance vector
+        initializeVector(configfile);
 	}
 
     public void initializeVector(String path)
@@ -85,10 +88,12 @@ public class Router {
         }
         // initialize self cost
         distancevector[routerid] = 0;
+
         // now initialize with neighbour values
         for(int i=1;i<fileLines.length;i++)
         {
             int routerId = Integer.parseInt(fileLines[i].substring(2,3));
+            neighbourIds.add(routerId);
             neighbourPorts.add(Integer.parseInt(fileLines[i].substring(6,fileLines[i].length())));
             int idCost = Integer.parseInt(fileLines[i].substring(4,5));
             distancevector[routerId] = idCost;
@@ -107,23 +112,19 @@ public class Router {
         // send node current link state
         // vector to all neighbours
         // i.e. distancevector
-        byte[] sendData = new byte[10];
-        String sendString = Arrays.toString(distancevector);
-
-        try {
-            sendData = sendString.getBytes("US-ASCII");
-        } catch (Exception e) {
-            System.out.println("String to byte error");
-        }
-
+        
+        int index = 0;
         for(int portNo : neighbourPorts)
         {
+            LinkState state  = new LinkState(0, neighbourIds.get(index), distancevector);
+            byte[] sendData = state.getBytes();
             DatagramPacket pkt = new DatagramPacket(sendData, sendData.length, IPAddress, portNo);
             try {
                 UDPSocket.send(pkt);
             } catch (Exception e) {
                 System.out.println("Broadcast error");
             }
+            index++;
         }
 
         // reset timer
@@ -136,7 +137,7 @@ public class Router {
         // nodes received, calculate route
         // information, based on Dijstra
         // algorithm
-
+        System.out.println("Currently no algorithm implemented");
         // print results
         System.out.println("Routing Info");
         System.out.println("RouterID \t Distance \t Prev RouterID");
@@ -158,30 +159,11 @@ public class Router {
         // that updateNodeRoute can calcutate
         // the Dijstra algorithm
         byte[] data = packet.getData();
-        String rcvData = new String(data);
-        String[] vector = rcvData.substring(1, rcvData.length() - 1).split(", ");
-        // now we have the received data in form:
-        // "3", "5", "0", "999", "1" etc
-        
-        // convert to int
-        int[] intVector = new int[vector.length];
-        for(int i=0;i<vector.length;i++) {
-            intVector[i] = Integer.parseInt(vector[i]);
-        }
-
-        // find out which router it came from
-        int routerId = 0;
-        for(int val : intVector)
-        {
-            if(val == 0)
-                break;
-            else
-                routerId++;
-        }
+        LinkState state = new LinkState(data);
 
         // now insert into our ArrayList data
         // structure
-        nodeData.add(routerId, intVector);
+        nodeData.add(state.sourceId, state.getCost());
     }
 
     public void forwardData(DatagramPacket packet)
@@ -202,12 +184,13 @@ public class Router {
     * 
     */
 	public void compute() {
+        System.out.println("Computing...");
         // set up initial timer tasks
         timer.schedule(new SendStateTimer(this), 1000);
         timer.schedule(new UpdateRouteTimer(this), 1000);
 
         // create packet data size
-        byte[] sendData = new byte[1024];
+        byte[] sendData = new byte[LinkState.MAX_SIZE];
 
         // run loop
         boolean runProgram = true;
@@ -296,7 +279,7 @@ public class Router {
 		Router router = new Router(peerip, routerid, port, configfile, neighborupdate, forwardtable);
 		
 		System.out.println("Router initialized..running");
-		//router.compute();
+		router.compute();
 	}
 
 }
