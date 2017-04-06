@@ -13,19 +13,7 @@ import java.lang.Math;
  */
 public class Router {
 
-    /**
-        * Constructor to initialize the program 
-        * 
-        * @param peerip     IP address of other routers (we assume that all routers are running in the same machine)
-        * @param routerid   Router ID
-        * @param port       Router UDP port number
-        * @param configfile Configuration file name
-        * @param neighborupdate link state update interval - used to update router's link state vector to neighboring nodes
-        * @param routeupdate    Route update interval - used to update route information using Dijkstra's algorithm
- 
-     */
-
-    // variables
+    // class variables
     private Timer timer;
     private DatagramSocket UDPSocket;
     private String peerip;
@@ -39,12 +27,23 @@ public class Router {
     private LinkedList<Integer> neighbourPorts;
     private ArrayList<Integer> neighbourIds;
 
+    /**
+        * Constructor to initialize the program 
+        * 
+        * @param peerip     IP address of other routers (we assume that all routers are running in the same machine)
+        * @param routerid   Router ID
+        * @param port       Router UDP port number
+        * @param configfile Configuration file name
+        * @param neighborupdate link state update interval - used to update router's link state vector to neighboring nodes
+        * @param routeupdate    Route update interval - used to update route information using Dijkstra's algorithm
+ 
+     */
     public Router(String peerip, int routerid, int port, String configfile, int neighborupdate, int routeupdate) {
         // save data
         this.peerip = peerip;
         this.port = port;
-        System.out.println("Port number: "+port);
         this.routerid = routerid;
+
         // create sender socket
         try {
             UDPSocket = new DatagramSocket(port);
@@ -61,142 +60,104 @@ public class Router {
             System.out.println(e.getMessage());
         }
 
+        // create timer object
+        timer = new Timer();
+
+        // initialize data structures with
+        // default information
+        initializeDataStructures(configfile);
+    }
+
+    public void initializeDataStructures(String path)
+    {
+        // sets up the initial data structure
+        // conditions based on input parameters
+        // and the config file contents
+        
+        // read config file
+        byte[] fileData = readFile(path);
+        String fileString = new String(fileData);
+        String fileLines[] = fileString.split("\n");
+
+        // extract total number of network routers
+        noRouters = Integer.parseInt(fileLines[0]);
+
+        // initialize link state vectors
+        distancevector = new int[noRouters];
+        previousvector = new int[noRouters];
+
         // create data structure, updated
         // when neighbour broadcast is
         // received
         nodeData = new LinkedList<int[]>();
         neighbourIds = new ArrayList<Integer>();
         neighbourPorts = new LinkedList<Integer>();
-        timer = new Timer();
-
-        // create node distance vector
-        initializeVector(configfile);
-    }
-
-    public void initializeVector(String path)
-    {
-        byte[] fileData = readFile(path);
-        String fileString = new String(fileData);
-        String fileLines[] = fileString.split("\n");
-        noRouters = Integer.parseInt(fileLines[0]);
-
-        distancevector = new int[noRouters];
-        previousvector = new int[noRouters];
+        
+        // initialize all node link states
+        // to null
         for(int i=0;i<noRouters;i++)
         {
             nodeData.add(null);
         }
 
         // initialize vector with infinity values
+        // and previous vector values with current
+        // router id
         for(int i=0;i<distancevector.length;i++) {
             distancevector[i] = 999;
             previousvector[i] = routerid;
         }
-        // initialize self cost
+
+        // initialize self cost as zero
         distancevector[routerid] = 0;
 
         // now initialize with neighbour values
+        // extracted from the config file
         for(int i=1;i<fileLines.length;i++)
         {
             int routerId = Integer.parseInt(fileLines[i].substring(2,3));
+            // record all neighbour ids
             neighbourIds.add(routerId);
+            // record all neighbour ports
             neighbourPorts.add(Integer.parseInt(fileLines[i].substring(6,fileLines[i].length())));
             int idCost = Integer.parseInt(fileLines[i].substring(4,5));
+            // update vector with cost
             distancevector[routerId] = idCost;
         }
 
+        // set current router link state
+        // to current link state
         nodeData.set(routerid, distancevector);
-        
-        // print initial vector state
-        for(int val : distancevector)
-        {
-            System.out.print(val + " ");
+    }
+
+    public synchronized void sendSocketData(DatagramPacket packet, String errorMessage)
+    {
+        // a helper method that provides
+        // thread safea access to the socket
+        // send method
+        try {
+            UDPSocket.send(packet);
+        } catch (Exception e) {
+            System.out.println(errorMessage);
         }
-        System.out.println();
     }
 
     public synchronized void sendNodeState()
     {
         // send node current link state
         // vector to all neighbours
-        // i.e. distancevector
-        System.out.println("Sending node state");        
         int index = 0;
         for(int portNo : neighbourPorts)
         {
             LinkState state  = new LinkState(routerid, neighbourIds.get(index), distancevector);
             byte[] sendData = state.getBytes();
             DatagramPacket pkt = new DatagramPacket(sendData, sendData.length, IPAddress, portNo);
-            try {
-                UDPSocket.send(pkt);
-            } catch (Exception e) {
-                System.out.println("Broadcast error");
-            }
+            sendSocketData(pkt, "Broadcast error");
             index++;
         }
 
         // reset timer
         timer.schedule(new SendStateTimer(this), 1000);
-    }
-
-    public int getNodeNotInN(int[] N)
-    {
-        // check that values 0-9 are
-        for(int i=0;i<N.length;i++) {
-            if(N[i] != i) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    public int findMinNodeNotInN(int[] N)
-    {
-        int lowest = 1000;
-        int lowestIndex = -1;
-        for(int i=0;i<distancevector.length;i++)
-        {
-            if(distancevector[i]!= 0 && distancevector[i]<=lowest
-                    && N[i]!=i)
-            {
-                lowest = distancevector[i];
-                lowestIndex = i;
-            }
-        }
-        if(lowestIndex == -1) {
-            for(int val : distancevector)
-            {
-                System.out.println(val);
-            }
-        }
-        else {
-        }
-        return lowestIndex;
-    }
-
-    public boolean allInfoReceived()
-    {
-        for(int[] vector : nodeData)
-        {
-            if(vector == null)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public int getNodeDataSize()
-    {
-        int size = 0;
-        for(int[] val:nodeData)
-        {
-            if(val != null)
-            {
-                size++;
-            }
-        }
-        return size;
     }
 
     public synchronized void updateNodeRoute()
@@ -205,16 +166,8 @@ public class Router {
         // nodes received, calculate route
         // information, based on Dijstra
         // algorithm
-        System.out.println("Node size = " + getNodeDataSize());
-        System.out.println("Neighbours = " + noRouters);
         if(getNodeDataSize() == noRouters) {
-            // calculate algorithm
-            System.out.println("Algorithm starting...");
-
-            // for all neighbours, cost = cost
-            // for all other nodes, cost = infinity
-            //
-
+            // Dijkstra algorithm
             // general process:
             // choose smallest out of distance vector
             // values
@@ -226,41 +179,35 @@ public class Router {
             // then start with N = u
             int[] N = new int[distancevector.length];
             N[routerid] = routerid;
+
             // loop while all nodes not in N
-            while(getNodeNotInN(N) != -1) {
-                // find node not in N such that d(node) is minimum
-                // find minimum - not implemented
-                int id = findMinNodeNotInN(N);
-                int w = id; //distancevector[id];
+            while(findMinNodeNotInN(N) != -1) {
+                // find node w not in N such that d(node) is minimum
+                int w = findMinNodeNotInN(N);
                 // add to N
                 N[w] = w;
                 // calculate new D(v) for
                 // each router based on new w info
                 for(int i=0;i<N.length;i++)
                 {
-                    // check if each router in N
-                    if(true)//N[i]!=i)
-                    {
-                        // if not, compute either original
-                        // value, or distance from root to
-                        // w, then w to router
-                        System.out.println("Comparing: "+distancevector[i]+" "+ distancevector[w] + nodeData.get(w)[i]+"N index="+i+" vect l="+N.length);
-                        int newResult = Math.min(distancevector[i], distancevector[w] + nodeData.get(w)[i]);
-                        if(newResult != distancevector[i])
-                        {
-                            // if the distance vector is getting
-                            // updated from infinity the first time
-                            previousvector[i] = w;
-                        }
-                        distancevector[i] = newResult;
-
-                    }
+                    // compute min of original
+                    // value, or distance from root to
+                    // w, then w to router
+                    int newResult = Math.min(distancevector[i], distancevector[w] + nodeData.get(w)[i]);
+                    // if a new value, update previous router value
+                    if(newResult != distancevector[i])
+                        previousvector[i] = w;
+                    // update distance vector with new result
+                    distancevector[i] = newResult;
+                    // update current node link state
+                    // with new vector
+                    nodeData.set(routerid, distancevector);
                 }
-                // update D(v) for all v adjacent to node, and not in N
-                //
             }
-            // print results
-            System.out.println("Routing Info");
+
+            // now that the distancevector has been
+            // updated, print results
+            System.out.println("\nRouting Info");
             System.out.println("RouterID \t Distance \t Prev RouterID");
             int numNodes = noRouters;
             for(int i = 0; i < numNodes; i++)
@@ -277,7 +224,43 @@ public class Router {
         timer.schedule(new UpdateRouteTimer(this), 1000);
     }
 
-    public synchronized void updateData(DatagramPacket packet)
+    public int findMinNodeNotInN(int[] N)
+    {
+        // returns the minimum node value
+        // not in the provided array
+        // if no values not in N, return -1
+        int lowest = 1000;
+        int lowestIndex = -1;
+        for(int i=0;i<distancevector.length;i++)
+        {
+            if(distancevector[i]!= 0 && distancevector[i]<=lowest
+                    && N[i]!=i)
+            {
+                lowest = distancevector[i];
+                lowestIndex = i;
+            }
+        }
+        return lowestIndex;
+    }
+
+    public int getNodeDataSize()
+    {
+        // returns the "true" size
+        // of node data structure
+        int size = 0;
+        for(int[] val:nodeData)
+        {
+            if(val != null)
+            {
+                size++;
+            }
+        }
+        return size;
+    }
+
+
+
+    public void updateData(DatagramPacket packet)
     {
         // update link state data structure
         // updates nodeData with new info so
@@ -295,26 +278,26 @@ public class Router {
 
     public void forwardData(DatagramPacket packet)
     {
+        // Broadcast Algorithm
+        // All received packets are forwarded
+        // to all neighbour ports, unless
+        // originally sent my current router
+        // Messages will 'live forever'
+        
+        // convert received data into link state
         LinkState state = new LinkState(packet.getData());
-        //System.out.println("Rec. orig. packet from "+state.sourceId);
+
+        // if packet originally from current
+        // router, do not forward again
         if(state.sourceId == routerid)
             return;
-        int index = 0;
+
         // forward received packet to all neighbours 
         for(int portNo : neighbourPorts)
         {
-            //System.out.println("Sending to: " + portNo);
-            //state.destId = neighbourPorts.get(index);
-            //System.out.println("Forwarding to: "+state.destId);
             byte[] sendData = state.getBytes();
-            //System.out.println("Sending to port: "+portNo);
             DatagramPacket pkt = new DatagramPacket(sendData, sendData.length, IPAddress, portNo);
-            try {
-                UDPSocket.send(pkt);
-            } catch (Exception e) {
-                System.out.println("Forwarding broadcast error");
-            }
-            index++;
+            sendSocketData(pkt, "Forwarding broadcast error");
         }
     }
 
@@ -323,7 +306,8 @@ public class Router {
     * 
     */
     public void compute() {
-        System.out.println("Computing...");
+        // Main Program Logic
+        
         // set up initial timer tasks
         timer.schedule(new SendStateTimer(this), 1000);
         timer.schedule(new UpdateRouteTimer(this), 1000);
@@ -331,7 +315,7 @@ public class Router {
         // create packet data size
         byte[] sendData = new byte[LinkState.MAX_SIZE];
 
-        // run loop
+        // run main program loop
         boolean runProgram = true;
         while(runProgram)
         {
@@ -342,9 +326,10 @@ public class Router {
             } catch (Exception e) {
                 System.out.println("Socket receive error");
             }
-            // when receive one, update info
+            // when receive packet, update data
+            // structure info
             updateData(rcvPkt);
-            // forward data to neighbours
+            // then forward data to all neighbours
             forwardData(rcvPkt);
         }
     }
