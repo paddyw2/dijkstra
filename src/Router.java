@@ -32,6 +32,7 @@ public class Router {
     private int port;
     private InetAddress IPAddress;
     private int[] distancevector;
+    private int[] previousvector;
     private int routerid;
     private int noRouters;
     private LinkedList<int[]> nodeData;
@@ -80,6 +81,7 @@ public class Router {
         noRouters = Integer.parseInt(fileLines[0]);
 
         distancevector = new int[noRouters];
+        previousvector = new int[noRouters];
         for(int i=0;i<noRouters;i++)
         {
             nodeData.add(null);
@@ -88,6 +90,7 @@ public class Router {
         // initialize vector with infinity values
         for(int i=0;i<distancevector.length;i++) {
             distancevector[i] = 999;
+            previousvector[i] = routerid;
         }
         // initialize self cost
         distancevector[routerid] = 0;
@@ -243,6 +246,12 @@ public class Router {
                         // w, then w to router
                         System.out.println("Comparing: "+distancevector[i]+" "+ distancevector[w] + nodeData.get(w)[i]+"N index="+i+" vect l="+N.length);
                         int newResult = Math.min(distancevector[i], distancevector[w] + nodeData.get(w)[i]);
+                        if(newResult != distancevector[i])
+                        {
+                            // if the distance vector is getting
+                            // updated from infinity the first time
+                            previousvector[i] = w;
+                        }
                         distancevector[i] = newResult;
 
                     }
@@ -254,12 +263,11 @@ public class Router {
             System.out.println("Routing Info");
             System.out.println("RouterID \t Distance \t Prev RouterID");
             int numNodes = noRouters;
-            int[] prev = new int[15];
             for(int i = 0; i < numNodes; i++)
             {
                 System.out.println(i + "\t\t   "
                         + distancevector[i] +  "\t\t\t"
-                        +  prev[i]);
+                        +  previousvector[i]);
             }
         } else {
             System.out.println("Not enough data yet");
