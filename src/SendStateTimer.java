@@ -1,4 +1,3 @@
-package src;
 import java.util.*;
 
 public class SendStateTimer extends TimerTask
@@ -13,7 +12,7 @@ public class SendStateTimer extends TimerTask
     public void run()
     {
         // runs the send distance vector method
-        router.sendNoteState();
+        router.sendNodeState();
 
     }
 }

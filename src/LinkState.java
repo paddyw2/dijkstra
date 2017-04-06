@@ -1,4 +1,3 @@
-package src;
 import java.net.*;
 import java.util.*;
 
@@ -28,7 +27,8 @@ public class LinkState {
 	public int[] cost; // link state vector which contains cost to all nodes; actual cost if node is a neighbor; 999 (infinity) if node is not a neighbor
 
 	
-	
+
+
 	 /**
 	 * Constructor
 	 * 
