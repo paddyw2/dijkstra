@@ -80,7 +80,8 @@ public class Router {
         String fileLines[] = fileString.split("\n");
 
         // extract total number of network routers
-        noRouters = Integer.parseInt(fileLines[0]);
+        String[] firstLine = fileLines[0].split(" ");
+        noRouters = Integer.parseInt(firstLine[0]);
 
         // initialize link state vectors
         distancevector = new int[noRouters];
@@ -115,12 +116,13 @@ public class Router {
         // extracted from the config file
         for(int i=1;i<fileLines.length;i++)
         {
-            int routerId = Integer.parseInt(fileLines[i].substring(2,3));
+            String[] currentLine = fileLines[i].split(" ");
+            int routerId = Integer.parseInt(currentLine[1]);
             // record all neighbour ids
             neighbourIds.add(routerId);
             // record all neighbour ports
-            neighbourPorts.add(Integer.parseInt(fileLines[i].substring(6,fileLines[i].length())));
-            int idCost = Integer.parseInt(fileLines[i].substring(4,5));
+            neighbourPorts.add(Integer.parseInt(currentLine[3]));
+            int idCost = Integer.parseInt(currentLine[2]);
             // update vector with cost
             distancevector[routerId] = idCost;
         }
@@ -207,7 +209,7 @@ public class Router {
 
             // now that the distancevector has been
             // updated, print results
-            System.out.println("\nRouting Info");
+            System.out.println("\nRouting Info for Router ID: "+routerid);
             System.out.println("RouterID \t Distance \t Prev RouterID");
             int numNodes = noRouters;
             for(int i = 0; i < numNodes; i++)
@@ -251,13 +253,10 @@ public class Router {
         for(int[] val:nodeData)
         {
             if(val != null)
-            {
                 size++;
-            }
         }
         return size;
     }
-
 
 
     public void updateData(DatagramPacket packet)
